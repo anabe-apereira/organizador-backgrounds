@@ -38,14 +38,19 @@ DEFAULT_CONFIG = {
 }
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('organize.log'),
-        logging.StreamHandler()
-    ]
-)
+log_file = os.path.join(os.path.expanduser('~'), 'organize_backgrounds.log')
+try:
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ]
+    )
+except Exception:
+    # Fallback se logging falhar no executável
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 @dataclass
 class ColorInfo:
@@ -56,16 +61,16 @@ class ColorInfo:
 def get_color_ranges() -> Dict[str, ColorInfo]:
     """Return color range definitions."""
     return {
-        'red': ColorInfo('red', [(0, 10), (170, 179)]),
-        'orange': ColorInfo('orange', [(11, 25)]),
-        'yellow': ColorInfo('yellow', [(26, 35)]),
-        'green': ColorInfo('green', [(36, 85)]),
-        'cyan': ColorInfo('cyan', [(86, 100)]),
-        'blue': ColorInfo('blue', [(101, 140)]),
-        'violet': ColorInfo('violet', [(141, 160)]),
-        'pink': ColorInfo('pink', [(161, 170)]),
-        'white': ColorInfo('white', [], is_bw=True),
-        'black': ColorInfo('black', [], is_bw=True)
+        'vermelho': ColorInfo('vermelho', [(0, 10), (170, 179)]),
+        'laranja': ColorInfo('laranja', [(11, 25)]),
+        'amarelo': ColorInfo('amarelo', [(26, 35)]),
+        'verde': ColorInfo('verde', [(36, 85)]),
+        'ciano': ColorInfo('ciano', [(86, 100)]),
+        'azul': ColorInfo('azul', [(101, 140)]),
+        'violeta': ColorInfo('violeta', [(141, 160)]),
+        'rosa': ColorInfo('rosa', [(161, 170)]),
+        'branco': ColorInfo('branco', [], is_bw=True),
+        'preto': ColorInfo('preto', [], is_bw=True)
     }
 
 def is_color_in_range(h: int, color_info: ColorInfo) -> bool:
@@ -118,14 +123,14 @@ def analyze_frame_colors(frame, color_infos):
             s_val = s[i, j]
             v_val = v[i, j]
             
-            # Check for black
+            # Check for black (preto)
             if v_val < DEFAULT_CONFIG['value_threshold_black']:
-                color_counts['black'] += 1
+                color_counts['preto'] += 1
                 continue
                 
-            # Check for white
+            # Check for white (branco)
             if v_val > DEFAULT_CONFIG['value_threshold_white'] and s_val < DEFAULT_CONFIG['saturation_threshold_white']:
-                color_counts['white'] += 1
+                color_counts['branco'] += 1
                 continue
                 
             # Skip low saturation (grayscale)
@@ -146,10 +151,15 @@ def analyze_frame_colors(frame, color_infos):
 def process_video(video_path: Path, progress_callback=None):
     """Process a single video file and return dominant colors."""
     try:
+        # Verificar se o arquivo existe antes de tentar abrir
+        if not video_path.exists():
+            print(f"Arquivo não encontrado: {video_path}")
+            return None, []
+        
         # Open video file
         cap = cv2.VideoCapture(str(video_path))
         if not cap.isOpened():
-            logging.error(f"Could not open video: {video_path}")
+            print(f"Não foi possível abrir o vídeo: {video_path}")
             return None, []
         
         # Get video properties
@@ -194,7 +204,7 @@ def process_video(video_path: Path, progress_callback=None):
         cap.release()
         
         if frames_processed == 0:
-            logging.warning(f"No frames processed for: {video_path}")
+            print(f"Nenhum frame processado para: {video_path}")
             return video_path, []
         
         # Calculate average percentages
@@ -213,8 +223,17 @@ def process_video(video_path: Path, progress_callback=None):
         return video_path, dominant_colors
         
     except Exception as e:
-        logging.error(f"Error processing {video_path}: {str(e)}")
+        print(f"Erro ao processar {video_path}: {str(e)}")
         return video_path, []
+
+def get_color_combinations():
+    """Gera todas as combinações de duas cores em ordem alfabética."""
+    cores = ['amarelo', 'azul', 'ciano', 'laranja', 'rosa', 'verde', 'vermelho', 'violeta']
+    combinations = []
+    for i in range(len(cores)):
+        for j in range(i+1, len(cores)):
+            combinations.append(f"{cores[i]}-{cores[j]}")
+    return combinations
 
 def get_destination_folder(colors: List[Tuple[str, float]], dest_dir: Path) -> Path:
     """Determine the destination folder based on dominant colors."""
@@ -223,16 +242,18 @@ def get_destination_folder(colors: List[Tuple[str, float]], dest_dir: Path) -> P
     
     color_names = [color[0] for color in colors]
     
-    # If more than 3 colors or only one color
-    if len(color_names) > 3:
-        return dest_dir / 'colorido'
-    elif len(color_names) == 1:
+    # Se tiver apenas uma cor
+    if len(color_names) == 1:
         return dest_dir / color_names[0]
     
-    # For 2 or 3 colors, create a combination folder
-    folder_name = '-'.join(sorted(color_names))
-    return dest_dir / folder_name
-
+    # Se tiver exatamente 2 cores, cria pasta de combinação
+    elif len(color_names) == 2:
+        folder_name = '-'.join(sorted(color_names))
+        return dest_dir / folder_name
+    
+    # Se tiver 3 ou mais cores
+    else:
+        return dest_dir / 'colorido'
 def copy_video(src_path: Path, dest_dir: Path, overwrite=False) -> Path:
     """Copy video to destination with conflict resolution."""
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -255,16 +276,22 @@ def copy_video(src_path: Path, dest_dir: Path, overwrite=False) -> Path:
 class VideoOrganizerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Organizador de Fundos ProPresenter")
-        self.root.geometry("800x600")
-        
-        # Variables
-        self.src_dir = tk.StringVar()
-        self.dest_dir = tk.StringVar()
-        self.overwrite = tk.BooleanVar(value=False)
-        self.processing = False
-        
-        self.setup_ui()
+        try:
+            self.root.title("Organizador de Fundos ProPresenter")
+            self.root.geometry("800x600")
+            
+            # Variables
+            self.src_dir = tk.StringVar()
+            self.dest_dir = tk.StringVar()
+            self.overwrite = tk.BooleanVar(value=False)
+            self.delete_source = tk.BooleanVar(value=False)
+            self.processing = False
+            self.inactivity_timer = None
+            self.setup_ui()
+        except Exception as e:
+            messagebox.showerror("Erro de Inicialização", f"Erro ao iniciar aplicação: {str(e)}")
+            self.root.destroy()
+            raise
     
     def setup_ui(self):
         # Main frame
@@ -288,6 +315,15 @@ class VideoOrganizerApp:
             variable=self.overwrite
         ).grid(row=2, column=0, columnspan=3, pady=5, sticky=tk.W)
         
+        tk.Checkbutton(
+            main_frame, 
+            text="Excluir arquivos da pasta de origem após cópia",
+            variable=self.delete_source,
+            foreground="red",
+            bg="white",
+            selectcolor="white"
+        ).grid(row=3, column=0, columnspan=3, pady=5, sticky=tk.W)
+        
         # Progress
         self.progress_var = tk.DoubleVar()
         self.progress = ttk.Progressbar(
@@ -297,16 +333,16 @@ class VideoOrganizerApp:
             mode='determinate',
             variable=self.progress_var
         )
-        self.progress.grid(row=3, column=0, columnspan=3, pady=10, sticky=tk.EW)
+        self.progress.grid(row=4, column=0, columnspan=3, pady=10, sticky=tk.EW)
         
         # Log area
-        ttk.Label(main_frame, text="Log:").grid(row=4, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Log:").grid(row=5, column=0, sticky=tk.W, pady=5)
         self.log_text = tk.Text(main_frame, height=15, wrap=tk.WORD)
-        self.log_text.grid(row=5, column=0, columnspan=3, sticky=tk.NSEW, pady=5)
+        self.log_text.grid(row=6, column=0, columnspan=3, sticky=tk.NSEW, pady=5)
         
         # Scrollbar for log
         scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=self.log_text.yview)
-        scrollbar.grid(row=5, column=3, sticky=tk.NS)
+        scrollbar.grid(row=6, column=3, sticky=tk.NS)
         self.log_text['yscrollcommand'] = scrollbar.set
         
         # Start button
@@ -315,11 +351,11 @@ class VideoOrganizerApp:
             text="Iniciar Organização", 
             command=self.start_processing
         )
-        self.start_button.grid(row=6, column=0, columnspan=3, pady=10)
+        self.start_button.grid(row=7, column=0, columnspan=3, pady=10)
         
         # Configure grid weights
         main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(5, weight=1)
+        main_frame.rowconfigure(6, weight=1)
         
         # Redirect stdout to log
         sys.stdout = TextRedirector(self.log_text, "stdout")
@@ -341,8 +377,9 @@ class VideoOrganizerApp:
         self.root.update_idletasks()
     
     def start_processing(self):
-        if self.processing:
-            return
+        if self.inactivity_timer is not None:
+            self.root.after_cancel(self.inactivity_timer)
+            self.inactivity_timer = None
             
         src_dir = Path(self.src_dir.get())
         dest_dir = Path(self.dest_dir.get())
@@ -351,8 +388,8 @@ class VideoOrganizerApp:
             messagebox.showerror("Erro", "Por favor, selecione uma pasta de origem válida.")
             return
             
-        if not dest_dir:
-            messagebox.showerror("Erro", "Por favor, selecione uma pasta de destino.")
+        if not dest_dir or not dest_dir.exists():
+            messagebox.showerror("Erro", "Por favor, selecione uma pasta de destino válida.")
             return
         
         # Create destination directory if it doesn't exist
@@ -381,19 +418,23 @@ class VideoOrganizerApp:
         ).start()
     
     def process_videos(self, video_files, dest_dir, overwrite):
-        total_files = len(video_files)
-        processed = 0
-        
-        # Create required directories
+        # Criar pastas necessárias
         required_dirs = [
             'branco', 'vermelho', 'laranja', 'amarelo', 'verde',
             'ciano', 'azul', 'violeta', 'preto', 'rosa',
             'colorido', 'nao_identificado'
         ]
-        
+    
+        # Adicionar combinações de cores usando função centralizada
+        required_dirs.extend(get_color_combinations())
+    
+        # Criar todas as pastas necessárias
         for dir_name in required_dirs:
-            (dest_dir / dir_name).mkdir(exist_ok=True)
-        
+            (dest_dir / dir_name).mkdir(parents=True, exist_ok=True)
+            
+        total_files = len(video_files)
+        processed = 0
+       
         # Process each video
         for video_path in video_files:
             try:
@@ -417,6 +458,14 @@ class VideoOrganizerApp:
                 # Copy file
                 dest_path = copy_video(video_path, dest_folder, overwrite)
                 
+                # Delete source file if option is enabled
+                if self.delete_source.get():
+                    try:
+                        video_path.unlink()
+                        self.log(f"  ✅ Arquivo original excluído: {video_path.name}")
+                    except Exception as delete_error:
+                        self.log(f"  ⚠️ Erro ao excluir original: {str(delete_error)}")
+                
                 # Log results
                 colors_str = ", ".join(f"{c[0]} ({c[1]:.1f}%)" for c in dominant_colors) if dominant_colors else "não identificado"
                 self.log(f"  → {colors_str} → {dest_path.relative_to(dest_dir)}")
@@ -436,10 +485,32 @@ class VideoOrganizerApp:
         self.root.after(0, self.processing_complete)
     
     def processing_complete(self):
+        """Finaliza o processamento e inicia o temporizador para fechar a janela."""
         self.processing = False
         self.start_button.config(state=tk.NORMAL)
         self.root.title("Organizador de Fundos ProPresenter - Concluído")
-        messagebox.showinfo("Concluído", "Processamento finalizado!")
+        messagebox.showinfo("Concluído", "Processamento finalizado com sucesso!")
+        
+        # Configurar o temporizador para fechar após 30 segundos
+        self.inactivity_timer = self.root.after(30000, self.close_application)
+        
+        # Configurar eventos para resetar o temporizador quando houver interação
+        self.root.bind("<Button-1>", self.reset_inactivity_timer)
+        self.root.bind("<Key>", self.reset_inactivity_timer)
+        self.log_text.bind("<Button-1>", self.reset_inactivity_timer)
+
+    def reset_inactivity_timer(self, event=None):
+        """Reinicia o temporizador de inatividade."""
+        if hasattr(self, 'inactivity_timer'):
+            self.root.after_cancel(self.inactivity_timer)
+        self.inactivity_timer = self.root.after(30000, self.close_application)
+
+    def close_application(self, event=None):
+        """Fecha a aplicação de forma segura."""
+        if hasattr(self, 'inactivity_timer'):
+            self.root.after_cancel(self.inactivity_timer)
+        self.root.quit()
+        self.root.destroy()
 
 class TextRedirector:
     def __init__(self, widget, tag="stdout"):
@@ -460,82 +531,105 @@ def parse_arguments():
     parser.add_argument('--src', type=str, help='Pasta de origem contendo os vídeos')
     parser.add_argument('--dst', type=str, help='Pasta de destino para os vídeos organizados')
     parser.add_argument('--overwrite', action='store_true', help='Sobrescrever arquivos existentes')
+    parser.add_argument('--delete-source', action='store_true', help='Excluir arquivos da pasta de origem após cópia')
     return parser.parse_args()
 
 def main():
-    args = parse_arguments()
-    
-    if args.src and args.dst:
-        # Command line mode
-        src_dir = Path(args.src)
-        dest_dir = Path(args.dst)
+    try:
+        args = parse_arguments()
         
-        if not src_dir.exists() or not src_dir.is_dir():
-            print(f"Erro: A pasta de origem não existe: {src_dir}")
-            return
+        if args.src and args.dst:
+            # Command line mode
+            src_dir = Path(args.src)
+            dest_dir = Path(args.dst)
             
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Find all video files
-        video_files = []
-        for ext in DEFAULT_CONFIG['supported_formats']:
-            video_files.extend(list(src_dir.rglob(f"*{ext}")))
-            video_files.extend(list(src_dir.rglob(f"*{ext.upper()}")))
-        
-        if not video_files:
-            print(f"Nenhum arquivo de vídeo encontrado em {src_dir}")
-            return
-        
-        print(f"Processando {len(video_files)} vídeos...")
-        
-        # Create required directories
-        required_dirs = [
-            'branco', 'vermelho', 'laranja', 'amarelo', 'verde',
-            'ciano', 'azul', 'violeta', 'preto', 'rosa',
-            'colorido', 'nao_identificado'
-        ]
-        
-        for dir_name in required_dirs:
-            (dest_dir / dir_name).mkdir(exist_ok=True)
-        
-        # Process each video
-        for i, video_path in enumerate(video_files, 1):
-            try:
-                print(f"[{i}/{len(video_files)}] Processando: {video_path.name}")
+            if not src_dir.exists() or not src_dir.is_dir():
+                print(f"Erro: A pasta de origem não existe: {src_dir}")
+                return
                 
-                # Process video
-                _, dominant_colors = process_video(video_path)
-                
-                # Get destination folder
-                dest_folder = get_destination_folder(dominant_colors, dest_dir)
-                
-                # Create combination folder if it doesn't exist
-                dest_folder.mkdir(exist_ok=True)
-                
-                # Copy file
-                dest_path = copy_video(video_path, dest_folder, args.overwrite)
-                
-                # Print results
-                colors_str = ", ".join(f"{c[0]} ({c[1]:.1f}%)" for c in dominant_colors) if dominant_colors else "não identificado"
-                print(f"  → {colors_str} → {dest_path.relative_to(dest_dir)}")
-                
-            except Exception as e:
-                print(f"Erro ao processar {video_path.name}: {str(e)}")
-                # Try to copy to nao_identificado on error
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Find all video files
+            video_files = []
+            for ext in DEFAULT_CONFIG['supported_formats']:
+                video_files.extend(list(src_dir.rglob(f"*{ext}")))
+                video_files.extend(list(src_dir.rglob(f"*{ext.upper()}")))
+            
+            if not video_files:
+                print(f"Nenhum arquivo de vídeo encontrado em {src_dir}")
+                return
+            
+            print(f"Processando {len(video_files)} vídeos...")
+            
+            # Create required directories
+            required_dirs = [
+                'branco', 'vermelho', 'laranja', 'amarelo', 'verde',
+                'ciano', 'azul', 'violeta', 'preto', 'rosa',
+                'colorido', 'nao_identificado'
+            ]
+            
+            for dir_name in required_dirs:
+                (dest_dir / dir_name).mkdir(exist_ok=True)
+            
+            # Process each video
+            for i, video_path in enumerate(video_files, 1):
                 try:
-                    error_dest = dest_dir / 'nao_identificado'
-                    error_dest.mkdir(exist_ok=True)
-                    copy_video(video_path, error_dest, args.overwrite)
-                    print(f"  → Copiado para: {error_dest.relative_to(dest_dir)}")
-                except Exception as copy_error:
-                    print(f"  → Falha ao copiar: {str(copy_error)}")
-        
-        print("\nProcessamento concluído!")
-    else:
-        # GUI mode
-        root = tk.Tk()
-        app = VideoOrganizerApp(root)
-        root.mainloop()
+                    print(f"[{i}/{len(video_files)}] Processando: {video_path.name}")
+                    
+                    # Process video
+                    _, dominant_colors = process_video(video_path)
+                    
+                    # Get destination folder
+                    dest_folder = get_destination_folder(dominant_colors, dest_dir)
+                    
+                    # Create combination folder if it doesn't exist
+                    dest_folder.mkdir(exist_ok=True)
+                    
+                    # Copy file
+                    dest_path = copy_video(video_path, dest_folder, args.overwrite)
+                    
+                    # Delete source file if option is enabled
+                    if args.delete_source:
+                        try:
+                            video_path.unlink()
+                            print(f"  ✅ Arquivo original excluído: {video_path.name}")
+                        except Exception as delete_error:
+                            print(f"  ⚠️ Erro ao excluir original: {str(delete_error)}")
+                    
+                    # Print results
+                    colors_str = ", ".join(f"{c[0]} ({c[1]:.1f}%)" for c in dominant_colors) if dominant_colors else "não identificado"
+                    print(f"  → {colors_str} → {dest_path.relative_to(dest_dir)}")
+                    
+                except Exception as e:
+                    print(f"Erro ao processar {video_path.name}: {str(e)}")
+                    # Try to copy to nao_identificado on error
+                    try:
+                        error_dest = dest_dir / 'nao_identificado'
+                        error_dest.mkdir(exist_ok=True)
+                        copy_video(video_path, error_dest, args.overwrite)
+                        print(f"  → Copiado para: {error_dest.relative_to(dest_dir)}")
+                    except Exception as copy_error:
+                        print(f"  → Falha ao copiar: {str(copy_error)}")
+            
+            print("\nProcessamento concluído!")
+        else:
+            # GUI mode
+            root = tk.Tk()
+            try:
+                app = VideoOrganizerApp(root)
+                root.mainloop()
+            except Exception as e:
+                messagebox.showerror("Erro", f"Erro fatal na aplicação: {str(e)}")
+                root.destroy()
+    except Exception as e:
+        print(f"Erro ao iniciar aplicação: {str(e)}")
+        # Fallback para GUI se houver erro nos argumentos
+        try:
+            root = tk.Tk()
+            app = VideoOrganizerApp(root)
+            root.mainloop()
+        except Exception as gui_error:
+            print(f"Erro também no modo GUI: {str(gui_error)}")
 
 if __name__ == "__main__":
     main()

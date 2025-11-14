@@ -26,6 +26,7 @@ Thumbs.db
 # Arquivos de mídia grandes
 exemplos/
 exemplos_organizados/
+distribuicao/
 *.mp4
 *.mov
 *.avi
