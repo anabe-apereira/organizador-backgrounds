@@ -23,3 +23,10 @@ __pycache__/
 # Arquivos temporários
 .DS_Store
 Thumbs.db
+# Arquivos de mídia grandes
+exemplos/
+exemplos_organizados/
+*.mp4
+*.mov
+*.avi
+*.mkv
