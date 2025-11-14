@@ -1,0 +1,25 @@
+# .gitignore
+# Ambiente virtual
+venv/
+.env
+
+# Build e distribuição
+build/
+dist/
+*.spec
+
+# Arquivos do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs
+*.log
+
+# Arquivos executáveis
+*.exe
+
+# Arquivos temporários
+.DS_Store
+Thumbs.db
