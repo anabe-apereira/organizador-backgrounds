@@ -1,69 +1,92 @@
-# Organizador de Fundos ProPresenter
+# 🎥✨ Organizador de Fundos ProPresenter
 
-Aplicativo para organizar automaticamente vídeos usados como fundos no ProPresenter, separando-os por cores predominantes.
+Aplicativo para **organizar automaticamente** vídeos usados como fundos no ProPresenter, separando-os por cores predominantes.  
+Ideal para agilizar fluxos de mídia e manter bibliotecas visualmente organizadas! 🎨📁
 
-## Funcionalidades
+---
 
-- Análise de vídeos para identificar cores predominantes
-- Organização em pastas por cor única ou combinação de cores
-- Interface gráfica amigável
-- Modo linha de comando para automação
-- Suporte a múltiplos formatos de vídeo (mp4, mov, avi, m4v)
-- Geração de log detalhado
+## 🚀 Funcionalidades
 
-## Requisitos
+- 🎞️ **Análise automática de vídeos** para identificar cores predominantes  
+- 🗂️ **Organização em pastas** por cor única ou combinações  
+- 🖥️ **Interface gráfica amigável**  
+- 🧰 **Modo linha de comando** para automação  
+- 🎧 **Suporte a vários formatos de vídeo** (mp4, mov, avi, m4v)  
+- 📝 **Geração de log detalhado** para auditoria
 
-- Python 3.9 ou superior
-- Bibliotecas listadas em `requirements.txt`
+---
 
-## Instalação
+## 📦 Requisitos
 
-1. Clone este repositório ou faça o download dos arquivos
+- 🐍 Python **3.9+**
+- 📄 Bibliotecas listadas no `requirements.txt`
+
+---
+
+## 🔧 Instalação
+
+1. 🡇 Clone este repositório ou baixe os arquivos  
 2. Instale as dependências:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Como Usar
+---
 
-### Interface Gráfica
+## ▶️ Como Usar
 
-Execute o aplicativo sem argumentos para abrir a interface gráfica:
+### 🖱️ Interface Gráfica
+
+Abra o app sem argumentos:
 
 ```bash
 python organize_backgrounds.py
 ```
 
-### Linha de Comando
+### 🖥️ Linha de Comando
 
 ```bash
 python organize_backgrounds.py --src "caminho/para/origem" --dst "caminho/para/destino" [--overwrite]
 ```
 
-Parâmetros:
-- `--src`: Caminho para a pasta de origem contendo os vídeos
-- `--dst`: Caminho para a pasta de destino onde os vídeos organizados serão salvos
-- `--overwrite`: Opcional. Se especificado, sobrescreve arquivos existentes
+**Parâmetros:**
+- 📁 `--src`: pasta de origem com os vídeos  
+- 📁 `--dst`: pasta destino dos vídeos organizados  
+- 🔄 `--overwrite`: sobrescreve arquivos existentes (opcional)
 
-### Pastas de Saída
+---
 
-Os vídeos serão organizados nas seguintes pastas:
-- Pastas de cores únicas: `branco/`, `vermelho/`, `laranja/`, `amarelo/`, `verde/`, `ciano/`, `azul/`, `violeta/`, `preto/`, `rosa/`
-- Pastas de combinação: `cor1-cor2/` (ex: `azul-amarelo/`)
-- `colorido/`: Para vídeos com mais de 3 cores predominantes
-- `nao_identificado/`: Para vídeos que não puderam ser classificados
+## 🌈 Pastas de Saída
 
-## Gerando um Executável (Windows)
+Os vídeos serão organizados em:
 
-Para criar um executável .exe, use o PyInstaller com as opções recomendadas:
+- 🎨 Cores únicas:  
+  `branco/`, `vermelho/`, `laranja/`, `amarelo/`, `verde/`, `ciano/`, `azul/`, `violeta/`, `preto/`, `rosa/`
+- 🌓 Combinações:  
+  `cor1-cor2/` (ex: `azul-amarelo/`)
+- 🌈 `colorido/`: mais de 3 cores predominantes  
+- ❓ `nao_identificado/`: vídeos sem classificação possível
+
+---
+
+## 🧪 Criando um Executável (Windows)
+
+Instale o PyInstaller:
 
 ```bash
 pip install pyinstaller
+```
+
+Gere o executável:
+
+```bash
 pyinstaller --onefile --windowed --icon=NONE --add-data "requirements.txt;." organize_backgrounds.py
 ```
 
-Para um executável mais robusto, crie um arquivo `organizer.spec`:
+### 📁 Versão robusta com `.spec`
+
+Crie um arquivo `organizer.spec`:
 
 ```python
 # organizer.spec
@@ -106,29 +129,37 @@ exe = EXE(pyz,
 ```
 
 Depois execute:
+
 ```bash
 pyinstaller organizer.spec
 ```
 
-O arquivo executável estará em `dist/OrganizadorFunds.exe`.
+📂 O arquivo final estará em:  
+`dist/OrganizadorFundos.exe`
 
-## Personalização
+---
 
-Você pode ajustar os parâmetros de detecção de cores modificando as constantes no início do arquivo `organize_backgrounds.py`:
+## ⚙️ Personalização
+
+Edite parâmetros no início do arquivo `organize_backgrounds.py`:
 
 ```python
 DEFAULT_CONFIG = {
-    'sample_frames': 10,        # Número de quadros a serem amostrados
-    'resize_width': 320,        # Largura para redimensionar os quadros
-    'min_color_percent': 8,     # Percentual mínimo para considerar uma cor
+    'sample_frames': 10,
+    'resize_width': 320,
+    'min_color_percent': 8,
     # ... outros parâmetros
 }
 ```
 
-## Logs
+---
 
-Um arquivo `organize.log` é criado no diretório de execução com informações detalhadas do processamento.
+## 📜 Logs
 
-## Licença
+Um arquivo `organize.log` é gerado automaticamente com informações detalhadas do processamento.
 
-Este projeto está licenciado sob a licença MIT.
+---
+
+## 📄 Licença
+
+Este projeto está licenciado sob a **MIT License**.
