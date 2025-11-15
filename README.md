@@ -145,9 +145,9 @@ Edite parâmetros no início do arquivo `organize_backgrounds.py`:
 
 ```python
 DEFAULT_CONFIG = {
-    'sample_frames': 10,
-    'resize_width': 320,
-    'min_color_percent': 8,
+    'sample_frames': 10,      # Número de quadros a serem amostrados
+    'resize_width': 320,      # Largura para redimensionar os quadros
+    'min_color_percent': 8,   # Percentual mínimo para considerar uma cor
     # ... outros parâmetros
 }
 ```
