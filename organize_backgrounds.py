@@ -1,3 +1,15 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Organizador de Fundos ProPresenter
+---------------------------------
+Autor: Ana Beatriz Alves Pereira
+Versão: 1.0.0
+Descrição: Ferramenta para organização automática de vídeos de fundo por cores dominantes.
+Licença: MIT
+Site: https://github.com/anabe-apereira/organizador-backgrounds
+"""
+
 import os
 import sys
 import cv2
@@ -19,7 +31,7 @@ import argparse
 DEFAULT_CONFIG = {
     'sample_frames': 10,  # Number of frames to sample from each video
     'resize_width': 320,  # Width to resize frames for processing
-    'min_color_percent': 8,  # Minimum percentage for a color to be considered
+    'min_color_percent': 20,  # Minimum percentage for a color to be considered
     'supported_formats': ('.mp4', '.mov', '.avi', '.m4v'),
     'color_ranges': {
         'red': [(0, 10), (170, 179)],
@@ -38,19 +50,27 @@ DEFAULT_CONFIG = {
 }
 
 # Configure logging
-log_file = os.path.join(os.path.expanduser('~'), 'organize_backgrounds.log')
-try:
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ]
-    )
-except Exception:
-    # Fallback se logging falhar no executável
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+def setup_logging():
+    """Configura logging com arquivo timestamp."""
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_file = f"logs_{timestamp}.txt"
+    
+    try:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_file, encoding='utf-8'),
+                logging.StreamHandler()
+            ]
+        )
+        logging.info(f"Arquivo de log criado: {log_file}")
+        return log_file
+    except Exception as e:
+        # Fallback se logging falhar no executável
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        logging.info(f"Erro ao criar arquivo de log: {e}")
+        return None
 
 @dataclass
 class ColorInfo:
@@ -58,20 +78,40 @@ class ColorInfo:
     h_range: List[Tuple[int, int]]
     is_bw: bool = False
 
+def rgb_to_hsv_range(r_center: int, g_center: int, b_center: int, tolerance: int = 30) -> List[Tuple[int, int]]:
+    """Converte um centro de cor RGB para uma faixa de matiz HSV com tolerância."""
+    # Criar uma imagem 1x1 com a cor RGB
+    rgb_color = np.uint8([[[b_center, g_center, r_center]]])  # OpenCV usa BGR
+    hsv_color = cv2.cvtColor(rgb_color, cv2.COLOR_BGR2HSV)
+    h_center = hsv_color[0, 0, 0]
+    
+    # Calcular faixa com tolerância
+    h_min = max(0, h_center - tolerance)
+    h_max = min(179, h_center + tolerance)
+    
+    # Tratar caso especial de vermelho que atravessa o 0/179
+    if h_center < tolerance:
+        # Vermelho próximo ao 0, retorna duas faixas
+        return [(0, h_max), (179 - (tolerance - h_center), 179)]
+    elif h_center > (179 - tolerance):
+        # Vermelho próximo ao 179, retorna duas faixas
+        return [(h_min, 179), (0, tolerance - (179 - h_center))]
+    else:
+        # Cor normal, retorna uma faixa
+        return [(h_min, h_max)]
+
 def get_color_ranges() -> Dict[str, ColorInfo]:
-    """Return color range definitions."""
-    return {
-        'vermelho': ColorInfo('vermelho', [(0, 10), (170, 179)]),
-        'laranja': ColorInfo('laranja', [(11, 25)]),
-        'amarelo': ColorInfo('amarelo', [(26, 35)]),
-        'verde': ColorInfo('verde', [(36, 85)]),
-        'ciano': ColorInfo('ciano', [(86, 100)]),
-        'azul': ColorInfo('azul', [(101, 140)]),
-        'violeta': ColorInfo('violeta', [(141, 160)]),
-        'rosa': ColorInfo('rosa', [(161, 170)]),
-        'branco': ColorInfo('branco', [], is_bw=True),
-        'preto': ColorInfo('preto', [], is_bw=True)
-    }
+    """Return color range definitions from current config."""
+    color_infos = {}
+    
+    # Add colors from DEFAULT_CONFIG['color_ranges']
+    for color_name, ranges in DEFAULT_CONFIG.get('color_ranges', {}).items():
+        color_infos[color_name] = ColorInfo(color_name, ranges, is_bw=False)
+    
+    # Add black/white
+    color_infos['preto-branco'] = ColorInfo('preto-branco', [], is_bw=True)
+    
+    return color_infos
 
 def is_color_in_range(h: int, color_info: ColorInfo) -> bool:
     """Check if hue value falls within any of the color ranges."""
@@ -123,14 +163,9 @@ def analyze_frame_colors(frame, color_infos):
             s_val = s[i, j]
             v_val = v[i, j]
             
-            # Check for black (preto)
-            if v_val < DEFAULT_CONFIG['value_threshold_black']:
-                color_counts['preto'] += 1
-                continue
-                
-            # Check for white (branco)
-            if v_val > DEFAULT_CONFIG['value_threshold_white'] and s_val < DEFAULT_CONFIG['saturation_threshold_white']:
-                color_counts['branco'] += 1
+            # Check for black/white (preto-branco)
+            if v_val < DEFAULT_CONFIG['value_threshold_black'] or (v_val > DEFAULT_CONFIG['value_threshold_white'] and s_val < DEFAULT_CONFIG['saturation_threshold_white']):
+                color_counts['preto-branco'] += 1
                 continue
                 
             # Skip low saturation (grayscale)
@@ -228,50 +263,49 @@ def process_video(video_path: Path, progress_callback=None):
 
 def get_color_combinations():
     """Gera todas as combinações de duas cores em ordem alfabética."""
-    cores = ['amarelo', 'azul', 'ciano', 'laranja', 'rosa', 'verde', 'vermelho', 'violeta']
-    combinations = []
-    for i in range(len(cores)):
-        for j in range(i+1, len(cores)):
-            combinations.append(f"{cores[i]}-{cores[j]}")
-    return combinations
+    # Não é mais necessário criar combinações, pois usamos apenas a cor majoritária
+    return []
 
 def get_destination_folder(colors: List[Tuple[str, float]], dest_dir: Path) -> Path:
     """Determine the destination folder based on dominant colors."""
     if not colors:
         return dest_dir / 'nao_identificado'
     
-    color_names = [color[0] for color in colors]
+    # Se não houver cores predominantes claras (múltiplas cores sem predominância)
+    if len(colors) > 1:
+        # Verificar se a primeira cor tem uma predominância significativa (>50%)
+        if colors[0][1] > 50:
+            return dest_dir / colors[0][0]
+        else:
+            # Múltiplas cores sem predominância clara -> pasta colorido
+            return dest_dir / 'colorido'
     
-    # Se tiver apenas uma cor
-    if len(color_names) == 1:
-        return dest_dir / color_names[0]
-    
-    # Se tiver exatamente 2 cores, cria pasta de combinação
-    elif len(color_names) == 2:
-        folder_name = '-'.join(sorted(color_names))
-        return dest_dir / folder_name
-    
-    # Se tiver 3 ou mais cores
-    else:
-        return dest_dir / 'colorido'
-def copy_video(src_path: Path, dest_dir: Path, overwrite=False) -> Path:
+    # Apenas uma cor predominante
+    return dest_dir / colors[0][0]
+def copy_video(src_path: Path, dest_dir: Path, overwrite=False) -> Optional[Path]:
     """Copy video to destination with conflict resolution."""
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_path = dest_dir / src_path.name
     
-    if dest_path.exists() and not overwrite:
-        # Add a number suffix to avoid overwriting
-        counter = 1
-        while True:
-            new_name = f"{src_path.stem}({counter}){src_path.suffix}"
-            new_dest = dest_dir / new_name
-            if not new_dest.exists():
-                dest_path = new_dest
-                break
-            counter += 1
+    # Verificar se o arquivo já existe no destino
+    if dest_path.exists():
+        if overwrite:
+            try:
+                dest_path.unlink()
+            except Exception as e:
+                print(f"Erro ao sobrescrever arquivo {dest_path}: {e}")
+                return None
+        else:
+            # Arquivo já existe e não deve sobrescrever
+            print(f"Arquivo já existe no destino, ignorando: {src_path.name}")
+            return None
     
-    shutil.copy2(str(src_path), str(dest_path))
-    return dest_path
+    try:
+        shutil.copy2(str(src_path), str(dest_path))
+        return dest_path
+    except Exception as e:
+        print(f"Erro ao copiar arquivo {src_path}: {e}")
+        return None
 
 class VideoOrganizerApp:
     def __init__(self, root):
@@ -287,6 +321,18 @@ class VideoOrganizerApp:
             self.delete_source = tk.BooleanVar(value=False)
             self.processing = False
             self.inactivity_timer = None
+            
+            # Configuration variables
+            self.config_vars = {
+                'sample_frames': tk.IntVar(value=DEFAULT_CONFIG['sample_frames']),
+                'resize_width': tk.IntVar(value=DEFAULT_CONFIG['resize_width']),
+                'min_color_percent': tk.IntVar(value=DEFAULT_CONFIG['min_color_percent'])
+            }
+            
+            # Color variables
+            self.color_vars = {}
+            self.setup_color_vars()
+            
             self.setup_ui()
         except Exception as e:
             messagebox.showerror("Erro de Inicialização", f"Erro ao iniciar aplicação: {str(e)}")
@@ -336,30 +382,230 @@ class VideoOrganizerApp:
         self.progress.grid(row=4, column=0, columnspan=3, pady=10, sticky=tk.EW)
         
         # Log area
-        ttk.Label(main_frame, text="Log:").grid(row=5, column=0, sticky=tk.W, pady=5)
-        self.log_text = tk.Text(main_frame, height=15, wrap=tk.WORD)
-        self.log_text.grid(row=6, column=0, columnspan=3, sticky=tk.NSEW, pady=5)
+        log_frame = ttk.LabelFrame(main_frame, text="Logs de Processamento", padding="5")
+        log_frame.grid(row=5, column=0, columnspan=3, sticky=tk.NSEW, pady=5)
         
-        # Scrollbar for log
-        scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=self.log_text.yview)
-        scrollbar.grid(row=6, column=3, sticky=tk.NS)
-        self.log_text['yscrollcommand'] = scrollbar.set
+        self.log_text = tk.Text(log_frame, height=10, wrap=tk.WORD)
+        log_scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
+        self.log_text.configure(yscrollcommand=log_scrollbar.set)
         
-        # Start button
+        self.log_text.grid(row=0, column=0, sticky=tk.NSEW)
+        log_scrollbar.grid(row=0, column=1, sticky=tk.NS)
+        
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
+        
+        # Configuration and Start buttons
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=6, column=0, columnspan=3, pady=10, sticky=tk.EW)
+        
+        config_button = ttk.Button(button_frame, text="⚙️ Configurações", command=self.open_config_window)
+        config_button.pack(side=tk.LEFT, padx=5)
+        
         self.start_button = ttk.Button(
-            main_frame, 
+            button_frame, 
             text="Iniciar Organização", 
             command=self.start_processing
         )
-        self.start_button.grid(row=7, column=0, columnspan=3, pady=10)
+        self.start_button.pack(side=tk.RIGHT, padx=5)
         
         # Configure grid weights
         main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(6, weight=1)
+        main_frame.rowconfigure(5, weight=1)
         
         # Redirect stdout to log
-        sys.stdout = TextRedirector(self.log_text, "stdout")
+        self.text_redirector = TextRedirector(self.log_text, "stdout")
+        sys.stdout = self.text_redirector
         sys.stderr = TextRedirector(self.log_text, "stderr")
+        
+        # Configurar arquivo de log para as saídas
+        log_file = setup_logging()
+        if log_file:
+            self.text_redirector.set_log_file(log_file)
+            sys.stderr.set_log_file(log_file)
+    
+    def setup_color_vars(self):
+        """Initialize color variables with default RGB values."""
+        default_colors_rgb = {
+            'vermelho': (255, 0, 0),      # Vermelho puro
+            'laranja': (255, 165, 0),     # Laranja
+            'amarelo': (255, 255, 0),     # Amarelo
+            'verde': (0, 255, 0),         # Verde puro
+            'azul': (0, 0, 255),          # Azul puro
+            'violeta': (128, 0, 128),     # Violeta
+        }
+        
+        for color_name, (r, g, b) in default_colors_rgb.items():
+            self.color_vars[color_name] = {
+                'r': tk.IntVar(value=r),
+                'g': tk.IntVar(value=g),
+                'b': tk.IntVar(value=b),
+                'enabled': tk.BooleanVar(value=True)
+            }
+    
+    def open_config_window(self):
+        """Open configuration window for parameters and colors."""
+        config_window = tk.Toplevel(self.root)
+        config_window.title("Configurações de Processamento")
+        config_window.geometry("600x500")
+        config_window.resizable(False, False)
+        
+        # Create notebook for tabs
+        notebook = ttk.Notebook(config_window)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Parameters tab
+        params_frame = ttk.Frame(notebook)
+        notebook.add(params_frame, text="Parâmetros")
+        self.setup_params_tab(params_frame)
+        
+        # Colors tab
+        colors_frame = ttk.Frame(notebook)
+        notebook.add(colors_frame, text="Cores")
+        self.setup_colors_tab(colors_frame)
+        
+        # Buttons
+        button_frame = ttk.Frame(config_window)
+        button_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Button(button_frame, text="Salvar", command=lambda: self.save_config(config_window)).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(button_frame, text="Cancelar", command=config_window.destroy).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(button_frame, text="Restaurar Padrão", command=lambda: self.restore_defaults(config_window)).pack(side=tk.LEFT, padx=5)
+    
+    def setup_params_tab(self, parent):
+        """Setup parameters configuration tab."""
+        # Sample frames
+        ttk.Label(parent, text="Número de Quadros Amostrados:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=5)
+        sample_spinbox = ttk.Spinbox(parent, from_=1, to=100, textvariable=self.config_vars['sample_frames'], width=10)
+        sample_spinbox.grid(row=0, column=1, padx=10, pady=5, sticky=tk.W)
+        ttk.Label(parent, text="Quantos quadros analisar de cada vídeo").grid(row=0, column=2, sticky=tk.W, padx=10, pady=5)
+        
+        # Resize width
+        ttk.Label(parent, text="Largura de Redimensionamento:").grid(row=1, column=0, sticky=tk.W, padx=10, pady=5)
+        resize_spinbox = ttk.Spinbox(parent, from_=100, to=1920, increment=10, textvariable=self.config_vars['resize_width'], width=10)
+        resize_spinbox.grid(row=1, column=1, padx=10, pady=5, sticky=tk.W)
+        ttk.Label(parent, text="Largura para processamento (menor = mais rápido)").grid(row=1, column=2, sticky=tk.W, padx=10, pady=5)
+        
+        # Min color percent
+        ttk.Label(parent, text="Percentual Mínimo de Cor:").grid(row=2, column=0, sticky=tk.W, padx=10, pady=5)
+        percent_spinbox = ttk.Spinbox(parent, from_=1, to=100, textvariable=self.config_vars['min_color_percent'], width=10)
+        percent_spinbox.grid(row=2, column=1, padx=10, pady=5, sticky=tk.W)
+        ttk.Label(parent, text="Percentual mínimo para considerar uma cor dominante").grid(row=2, column=2, sticky=tk.W, padx=10, pady=5)
+    
+    def setup_colors_tab(self, parent):
+        """Setup colors configuration tab with RGB controls."""
+        # Create scrollable frame
+        canvas = tk.Canvas(parent)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Headers
+        ttk.Label(scrollable_frame, text="Cor", font=('Arial', 10, 'bold')).grid(row=0, column=0, padx=10, pady=5)
+        ttk.Label(scrollable_frame, text="R", font=('Arial', 10, 'bold')).grid(row=0, column=1, padx=5, pady=5)
+        ttk.Label(scrollable_frame, text="G", font=('Arial', 10, 'bold')).grid(row=0, column=2, padx=5, pady=5)
+        ttk.Label(scrollable_frame, text="B", font=('Arial', 10, 'bold')).grid(row=0, column=3, padx=5, pady=5)
+        ttk.Label(scrollable_frame, text="Preview", font=('Arial', 10, 'bold')).grid(row=0, column=4, padx=10, pady=5)
+        ttk.Label(scrollable_frame, text="Ativo", font=('Arial', 10, 'bold')).grid(row=0, column=5, padx=10, pady=5)
+        
+        row = 1
+        self.color_previews = {}
+        
+        for color_name, vars_dict in self.color_vars.items():
+            # Color name
+            ttk.Label(scrollable_frame, text=color_name.capitalize()).grid(row=row, column=0, padx=10, pady=3, sticky=tk.W)
+            
+            # RGB controls
+            r_spinbox = ttk.Spinbox(scrollable_frame, from_=0, to=255, textvariable=vars_dict['r'], width=6)
+            r_spinbox.grid(row=row, column=1, padx=5, pady=3)
+            
+            g_spinbox = ttk.Spinbox(scrollable_frame, from_=0, to=255, textvariable=vars_dict['g'], width=6)
+            g_spinbox.grid(row=row, column=2, padx=5, pady=3)
+            
+            b_spinbox = ttk.Spinbox(scrollable_frame, from_=0, to=255, textvariable=vars_dict['b'], width=6)
+            b_spinbox.grid(row=row, column=3, padx=5, pady=3)
+            
+            # Color preview
+            preview_label = tk.Label(scrollable_frame, width=8, height=1, relief=tk.RAISED, borderwidth=2)
+            preview_label.grid(row=row, column=4, padx=10, pady=3)
+            self.color_previews[color_name] = preview_label
+            
+            # Enable checkbox
+            ttk.Checkbutton(scrollable_frame, variable=vars_dict['enabled']).grid(row=row, column=5, padx=10, pady=3)
+            
+            # Update preview when values change
+            def update_preview(name=color_name, label=preview_label, r_var=vars_dict['r'], g_var=vars_dict['g'], b_var=vars_dict['b']):
+                r = r_var.get()
+                g = g_var.get()
+                b = b_var.get()
+                hex_color = f'#{r:02x}{g:02x}{b:02x}'
+                label.configure(bg=hex_color)
+            
+            # Bind updates
+            vars_dict['r'].trace('w', lambda *args, cn=color_name: update_preview())
+            vars_dict['g'].trace('w', lambda *args, cn=color_name: update_preview())
+            vars_dict['b'].trace('w', lambda *args, cn=color_name: update_preview())
+            
+            # Initial preview update
+            update_preview()
+            
+            row += 1
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+    
+    def save_config(self, window):
+        """Save configuration and update global config."""
+        # Update global config
+        global DEFAULT_CONFIG
+        DEFAULT_CONFIG['sample_frames'] = self.config_vars['sample_frames'].get()
+        DEFAULT_CONFIG['resize_width'] = self.config_vars['resize_width'].get()
+        DEFAULT_CONFIG['min_color_percent'] = self.config_vars['min_color_percent'].get()
+        
+        # Convert RGB to HSV and update color ranges
+        new_color_ranges = {}
+        for color_name, vars_dict in self.color_vars.items():
+            if vars_dict['enabled'].get():
+                r = vars_dict['r'].get()
+                g = vars_dict['g'].get()
+                b = vars_dict['b'].get()
+                
+                # Convert RGB to HSV range
+                hsv_ranges = rgb_to_hsv_range(r, g, b)
+                new_color_ranges[color_name] = hsv_ranges
+        
+        DEFAULT_CONFIG['color_ranges'] = new_color_ranges
+        
+        messagebox.showinfo("Sucesso", "Configurações salvas com sucesso!\nCores RGB convertidas para HSV para processamento.")
+        window.destroy()
+    
+    def restore_defaults(self, window):
+        """Restore default configuration."""
+        if messagebox.askyesno("Confirmar", "Deseja restaurar as configurações padrão?"):
+            # Reset parameters
+            self.config_vars['sample_frames'].set(10)
+            self.config_vars['resize_width'].set(320)
+            self.config_vars['min_color_percent'].set(20)
+            
+            # Reset colors
+            self.setup_color_vars()
+            
+            # Refresh the colors tab
+            for widget in window.winfo_children():
+                if isinstance(widget, ttk.Notebook):
+                    # Recreate the colors tab
+                    widget.forget(1)  # Remove the colors tab
+                    colors_frame = ttk.Frame(widget)
+                    widget.add(colors_frame, text="Cores")
+                    self.setup_colors_tab(colors_frame)
+                    break
     
     def browse_src(self):
         folder = filedialog.askdirectory()
@@ -372,8 +618,19 @@ class VideoOrganizerApp:
             self.dest_dir.set(folder)
     
     def log(self, message):
-        self.log_text.insert(tk.END, f"{message}\n")
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        formatted_message = f"[{timestamp}] {message}\n"
+        
+        # Escrever na tela
+        self.log_text.configure(state="normal")
+        self.log_text.insert(tk.END, formatted_message)
         self.log_text.see(tk.END)
+        self.log_text.configure(state="disabled")
+        
+        # Escrever no arquivo de log via stdout
+        print(message)
+        
+        # Forçar atualização da interface
         self.root.update_idletasks()
     
     def start_processing(self):
@@ -420,13 +677,10 @@ class VideoOrganizerApp:
     def process_videos(self, video_files, dest_dir, overwrite):
         # Criar pastas necessárias
         required_dirs = [
-            'branco', 'vermelho', 'laranja', 'amarelo', 'verde',
-            'ciano', 'azul', 'violeta', 'preto', 'rosa',
+            'vermelho', 'laranja', 'amarelo', 'verde',
+            'azul', 'violeta', 'preto-branco',
             'colorido', 'nao_identificado'
         ]
-    
-        # Adicionar combinações de cores usando função centralizada
-        required_dirs.extend(get_color_combinations())
     
         # Criar todas as pastas necessárias
         for dir_name in required_dirs:
@@ -457,6 +711,11 @@ class VideoOrganizerApp:
                 
                 # Copy file
                 dest_path = copy_video(video_path, dest_folder, overwrite)
+                
+                if dest_path is None:
+                    # Arquivo não foi copiado (já existe ou erro)
+                    self.log(f"  ⚠️ Arquivo não copiado: {video_path.name}")
+                    continue
                 
                 # Delete source file if option is enabled
                 if self.delete_source.get():
@@ -491,44 +750,63 @@ class VideoOrganizerApp:
         self.root.title("Organizador de Fundos ProPresenter - Concluído")
         messagebox.showinfo("Concluído", "Processamento finalizado com sucesso!")
         
+        # Código de fechamento automático comentado para possível reativação futura
         # Configurar o temporizador para fechar após 30 segundos
-        self.inactivity_timer = self.root.after(30000, self.close_application)
+        # self.inactivity_timer = self.root.after(30000, self.close_application)
         
         # Configurar eventos para resetar o temporizador quando houver interação
-        self.root.bind("<Button-1>", self.reset_inactivity_timer)
-        self.root.bind("<Key>", self.reset_inactivity_timer)
-        self.log_text.bind("<Button-1>", self.reset_inactivity_timer)
+        # self.root.bind("<Button-1>", self.reset_inactivity_timer)
+        # self.root.bind("<Key>", self.reset_inactivity_timer)
+        # self.log_text.bind("<Button-1>", self.reset_inactivity_timer)
 
     def reset_inactivity_timer(self, event=None):
         """Reinicia o temporizador de inatividade."""
-        if hasattr(self, 'inactivity_timer'):
-            self.root.after_cancel(self.inactivity_timer)
-        self.inactivity_timer = self.root.after(30000, self.close_application)
+        # Código comentado - função desativada
+        # if hasattr(self, 'inactivity_timer'):
+        #     self.root.after_cancel(self.inactivity_timer)
+        # self.inactivity_timer = self.root.after(30000, self.close_application)
+        pass
 
     def close_application(self, event=None):
         """Fecha a aplicação de forma segura."""
-        if hasattr(self, 'inactivity_timer'):
-            self.root.after_cancel(self.inactivity_timer)
-        self.root.quit()
-        self.root.destroy()
+        # Código comentado - função desativada
+        # if hasattr(self, 'inactivity_timer'):
+        #     self.root.after_cancel(self.inactivity_timer)
+        # self.root.quit()
+        # self.root.destroy()
+        pass
 
 class TextRedirector:
     def __init__(self, widget, tag="stdout"):
         self.widget = widget
         self.tag = tag
-    
+        self.log_file = None
+        
     def write(self, str_):
+        # Escrever no widget da interface
         self.widget.configure(state="normal")
         self.widget.insert("end", str_, (self.tag,))
         self.widget.see("end")
         self.widget.configure(state="disabled")
+        
+        # Escrever no arquivo de log
+        if self.log_file:
+            try:
+                with open(self.log_file, 'a', encoding='utf-8') as f:
+                    f.write(str_)
+            except Exception as e:
+                print(f"Erro ao escrever no arquivo de log: {e}", file=sys.stderr)
     
+    def set_log_file(self, log_file):
+        """Define o arquivo de log para salvar as saídas."""
+        self.log_file = log_file
+     
     def flush(self):
         pass
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Organiza vídeos por cor predominante.')
-    parser.add_argument('--src', type=str, help='Pasta de origem contendo os vídeos')
+    # ... (rest of the code remains the same)
     parser.add_argument('--dst', type=str, help='Pasta de destino para os vídeos organizados')
     parser.add_argument('--overwrite', action='store_true', help='Sobrescrever arquivos existentes')
     parser.add_argument('--delete-source', action='store_true', help='Excluir arquivos da pasta de origem após cópia')
@@ -536,9 +814,13 @@ def parse_arguments():
 
 def main():
     try:
+        # Configurar logging para ambos os modos (GUI e linha de comando)
+        log_file = setup_logging()
+        
         args = parse_arguments()
         
-        if args.src and args.dst:
+        # Verificar se os argumentos foram fornecidos
+        if hasattr(args, 'src') and hasattr(args, 'dst') and args.src and args.dst:
             # Command line mode
             src_dir = Path(args.src)
             dest_dir = Path(args.dst)
@@ -563,8 +845,8 @@ def main():
             
             # Create required directories
             required_dirs = [
-                'branco', 'vermelho', 'laranja', 'amarelo', 'verde',
-                'ciano', 'azul', 'violeta', 'preto', 'rosa',
+                'vermelho', 'laranja', 'amarelo', 'verde',
+                'azul', 'violeta', 'preto-branco',
                 'colorido', 'nao_identificado'
             ]
             
@@ -587,6 +869,11 @@ def main():
                     
                     # Copy file
                     dest_path = copy_video(video_path, dest_folder, args.overwrite)
+                    
+                    if dest_path is None:
+                        # Arquivo não foi copiado (já existe ou erro)
+                        print(f"  ⚠️ Arquivo não copiado: {video_path.name}")
+                        continue
                     
                     # Delete source file if option is enabled
                     if args.delete_source:
@@ -613,7 +900,7 @@ def main():
             
             print("\nProcessamento concluído!")
         else:
-            # GUI mode
+            # GUI mode - sempre iniciar GUI se não houver argumentos
             root = tk.Tk()
             try:
                 app = VideoOrganizerApp(root)
@@ -623,7 +910,7 @@ def main():
                 root.destroy()
     except Exception as e:
         print(f"Erro ao iniciar aplicação: {str(e)}")
-        # Fallback para GUI se houver erro nos argumentos
+        # Fallback para GUI se houver erro
         try:
             root = tk.Tk()
             app = VideoOrganizerApp(root)
