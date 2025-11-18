@@ -1,4 +1,5 @@
 # 🎥✨ Organizador de Fundos ProPresenter
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/anabe-apereira/organizador-backgrounds)
 
 Aplicativo para **organizar automaticamente** vídeos usados como fundos no ProPresenter, separando-os por cores predominantes.  
 Ideal para agilizar fluxos de mídia e manter bibliotecas visualmente organizadas! 🎨📁
