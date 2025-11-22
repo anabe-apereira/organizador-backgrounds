@@ -32,17 +32,26 @@ def set_win_taskbar_icon(root, icon_path):
     """Set taskbar icon on Windows"""
     try:
         if os.name == 'nt':  # Only for Windows
-            # Get the absolute path to the icon file
-            icon_path = os.path.abspath(icon_path)
+            # Try different paths for the icon
+            icon_paths = [
+                icon_path,
+                os.path.join(os.path.dirname(sys.executable), 'icon.ico'),
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), 'icon.ico'),
+                'icon.ico'  # Try relative path
+            ]
             
-            # Set window icon (for title bar and taskbar)
-            if os.path.exists(icon_path):
-                root.iconbitmap(default=icon_path)
-                
-                # Set taskbar icon (for Windows 7+)
-                if hasattr(ctypes, 'windll'):
-                    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("OrganizadorDeFundos.ProPresenter")
+            for path in icon_paths:
+                if os.path.exists(path):
+                    icon_path = os.path.abspath(path)
                     root.iconbitmap(default=icon_path)
+                    
+                    # Set taskbar icon (for Windows 7+)
+                    if hasattr(ctypes, 'windll'):
+                        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("OrganizadorDeFundos.ProPresenter")
+                    print(f"Ícone carregado com sucesso: {icon_path}")
+                    return
+            
+            print("Aviso: Ícone não encontrado em nenhum dos caminhos testados")
     except Exception as e:
         print(f"Erro ao definir o ícone da barra de tarefas: {e}")
 
@@ -358,10 +367,7 @@ class VideoOrganizerApp:
             
             # Definir o ícone do aplicativo
             icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'icon.ico')
-            if os.path.exists(icon_path):
-                set_win_taskbar_icon(self.root, icon_path)
-            else:
-                print(f"Aviso: Arquivo de ícone não encontrado em {icon_path}")
+            set_win_taskbar_icon(self.root, icon_path)
             
             # Variables
             self.src_dir = tk.StringVar()
@@ -416,21 +422,21 @@ class VideoOrganizerApp:
         ttk.Entry(main_frame, textvariable=self.dest_dir, width=50).grid(row=2, column=1, padx=5, pady=5, sticky=tk.EW)
         ttk.Button(main_frame, text="Procurar...", command=self.browse_dest).grid(row=2, column=2, padx=5, pady=5)
         
-        # Options
+        # Options - moved to separate frame for better organization
+        options_frame = ttk.LabelFrame(main_frame, text="Opções", padding="5")
+        options_frame.grid(row=3, column=0, columnspan=3, sticky=tk.EW, pady=10)
+        
         ttk.Checkbutton(
-            main_frame, 
+            options_frame, 
             text="Sobrescrever arquivos existentes",
             variable=self.overwrite
-        ).grid(row=2, column=0, columnspan=3, pady=5, sticky=tk.W)
+        ).grid(row=0, column=0, sticky=tk.W, pady=2)
         
-        tk.Checkbutton(
-            main_frame, 
+        ttk.Checkbutton(
+            options_frame, 
             text="Excluir arquivos da pasta de origem após cópia",
-            variable=self.delete_source,
-            foreground="red",
-            bg="white",
-            selectcolor="white"
-        ).grid(row=3, column=0, columnspan=3, pady=5, sticky=tk.W)
+            variable=self.delete_source
+        ).grid(row=1, column=0, sticky=tk.W, pady=2)
         
         # Progress
         self.progress_var = tk.DoubleVar()
@@ -537,22 +543,22 @@ class VideoOrganizerApp:
     def setup_params_tab(self, parent):
         """Setup parameters configuration tab."""
         # Sample frames
-        ttk.Label(parent, text="Número de Quadros Amostrados:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=5)
-        sample_spinbox = ttk.Spinbox(parent, from_=1, to=100, textvariable=self.config_vars['sample_frames'], width=10)
-        sample_spinbox.grid(row=0, column=1, padx=10, pady=5, sticky=tk.W)
-        ttk.Label(parent, text="Quantos quadros analisar de cada vídeo").grid(row=0, column=2, sticky=tk.W, padx=10, pady=5)
+        ttk.Label(parent, text="Número de Quadros Amostrados:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=(10, 2))
+        sample_spinbox = ttk.Spinbox(parent, from_=1, to=100, textvariable=self.config_vars['sample_frames'], width=15)
+        sample_spinbox.grid(row=0, column=1, padx=10, pady=(10, 2), sticky=tk.W)
+        ttk.Label(parent, text="Quantos quadros analisar de cada vídeo", font=('TkDefaultFont', 9), foreground='gray').grid(row=1, column=0, columnspan=2, sticky=tk.W, padx=10, pady=(0, 10))
         
         # Resize width
-        ttk.Label(parent, text="Largura de Redimensionamento:").grid(row=1, column=0, sticky=tk.W, padx=10, pady=5)
-        resize_spinbox = ttk.Spinbox(parent, from_=100, to=1920, increment=10, textvariable=self.config_vars['resize_width'], width=10)
-        resize_spinbox.grid(row=1, column=1, padx=10, pady=5, sticky=tk.W)
-        ttk.Label(parent, text="Largura para processamento (menor = mais rápido)").grid(row=1, column=2, sticky=tk.W, padx=10, pady=5)
+        ttk.Label(parent, text="Largura de Redimensionamento:").grid(row=2, column=0, sticky=tk.W, padx=10, pady=(10, 2))
+        resize_spinbox = ttk.Spinbox(parent, from_=100, to=1920, increment=10, textvariable=self.config_vars['resize_width'], width=15)
+        resize_spinbox.grid(row=2, column=1, padx=10, pady=(10, 2), sticky=tk.W)
+        ttk.Label(parent, text="Largura para processamento (menor = mais rápido)", font=('TkDefaultFont', 9), foreground='gray').grid(row=3, column=0, columnspan=2, sticky=tk.W, padx=10, pady=(0, 10))
         
         # Min color percent
-        ttk.Label(parent, text="Percentual Mínimo de Cor:").grid(row=2, column=0, sticky=tk.W, padx=10, pady=5)
-        percent_spinbox = ttk.Spinbox(parent, from_=1, to=100, textvariable=self.config_vars['min_color_percent'], width=10)
-        percent_spinbox.grid(row=2, column=1, padx=10, pady=5, sticky=tk.W)
-        ttk.Label(parent, text="Percentual mínimo para considerar uma cor dominante").grid(row=2, column=2, sticky=tk.W, padx=10, pady=5)
+        ttk.Label(parent, text="Percentual Mínimo de Cor:").grid(row=4, column=0, sticky=tk.W, padx=10, pady=(10, 2))
+        percent_spinbox = ttk.Spinbox(parent, from_=1, to=100, textvariable=self.config_vars['min_color_percent'], width=15)
+        percent_spinbox.grid(row=4, column=1, padx=10, pady=(10, 2), sticky=tk.W)
+        ttk.Label(parent, text="Percentual mínimo para considerar uma cor dominante", font=('TkDefaultFont', 9), foreground='gray').grid(row=5, column=0, columnspan=2, sticky=tk.W, padx=10, pady=(0, 10))
     
     def setup_colors_tab(self, parent):
         """Setup colors configuration tab with RGB controls."""
