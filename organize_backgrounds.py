@@ -11,16 +11,41 @@ Site: https://github.com/anabe-apereira/organizador-backgrounds
 """
 
 import os
+import re
 import sys
-import cv2
-import numpy as np
+import time
 import shutil
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-from pathlib import Path
+import ctypes
 from dataclasses import dataclass
-from typing import List, Dict, Tuple, Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+from pathlib import Path
+from tkinter import ttk, messagebox, filedialog
+from typing import List, Tuple, Dict, Optional
+
+import cv2
+import numpy as np
+from PIL import Image, ImageTk
+from sklearn.cluster import KMeans
+
+def set_win_taskbar_icon(root, icon_path):
+    """Set taskbar icon on Windows"""
+    try:
+        if os.name == 'nt':  # Only for Windows
+            # Get the absolute path to the icon file
+            icon_path = os.path.abspath(icon_path)
+            
+            # Set window icon (for title bar and taskbar)
+            if os.path.exists(icon_path):
+                root.iconbitmap(default=icon_path)
+                
+                # Set taskbar icon (for Windows 7+)
+                if hasattr(ctypes, 'windll'):
+                    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("OrganizadorDeFundos.ProPresenter")
+                    root.iconbitmap(default=icon_path)
+    except Exception as e:
+        print(f"Erro ao definir o ícone da barra de tarefas: {e}")
+
 import logging
 from datetime import datetime
 from tqdm import tqdm
@@ -52,24 +77,40 @@ DEFAULT_CONFIG = {
 # Configure logging
 def setup_logging():
     """Configura logging com arquivo timestamp."""
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    log_file = f"logs_{timestamp}.txt"
+    # Primeiro, configura um logger básico para capturar erros iniciais
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[logging.StreamHandler()]
+    )
     
     try:
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_file, encoding='utf-8'),
-                logging.StreamHandler()
-            ]
-        )
+        # Cria o diretório de logs se não existir
+        log_dir = Path('logs')
+        log_dir.mkdir(exist_ok=True)
+        
+        # Cria um nome de arquivo com timestamp
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        log_file = log_dir / f'logs_{timestamp}.txt'
+        
+        # Remove todos os handlers existentes
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
+        
+        # Configura o logging com arquivo e console
+        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        
+        logging.root.addHandler(file_handler)
+        logging.root.addHandler(console_handler)
+        
         logging.info(f"Arquivo de log criado: {log_file}")
-        return log_file
+        return str(log_file.absolute())
     except Exception as e:
-        # Fallback se logging falhar no executável
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-        logging.info(f"Erro ao criar arquivo de log: {e}")
+        logging.error(f"Erro ao configurar arquivo de log: {e}")
         return None
 
 @dataclass
@@ -282,6 +323,7 @@ def get_destination_folder(colors: List[Tuple[str, float]], dest_dir: Path) -> P
     
     # Apenas uma cor predominante
     return dest_dir / colors[0][0]
+
 def copy_video(src_path: Path, dest_dir: Path, overwrite=False) -> Optional[Path]:
     """Copy video to destination with conflict resolution."""
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -314,6 +356,13 @@ class VideoOrganizerApp:
             self.root.title("Organizador de Fundos ProPresenter")
             self.root.geometry("800x600")
             
+            # Definir o ícone do aplicativo
+            icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'icon.ico')
+            if os.path.exists(icon_path):
+                set_win_taskbar_icon(self.root, icon_path)
+            else:
+                print(f"Aviso: Arquivo de ícone não encontrado em {icon_path}")
+            
             # Variables
             self.src_dir = tk.StringVar()
             self.dest_dir = tk.StringVar()
@@ -344,15 +393,28 @@ class VideoOrganizerApp:
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
+        # Log file info
+        self.log_file = setup_logging()
+        log_frame = ttk.LabelFrame(main_frame, text="Arquivo de Log", padding="5")
+        log_frame.grid(row=0, column=0, columnspan=3, sticky=tk.EW, pady=(0, 10))
+        
+        ttk.Label(log_frame, text="Arquivo:", font=('TkDefaultFont', 8)).pack(anchor=tk.W)
+        log_path_label = ttk.Label(log_frame, text=self.log_file or "Não foi possível criar arquivo de log", 
+                                 foreground="blue", cursor="hand2", font=('TkDefaultFont', 8))
+        log_path_label.pack(anchor=tk.W, fill=tk.X)
+        
+        if self.log_file:
+            log_path_label.bind("<Button-1>", lambda e: os.startfile(os.path.dirname(self.log_file)))
+        
         # Source directory
-        ttk.Label(main_frame, text="Pasta de Origem:").grid(row=0, column=0, sticky=tk.W, pady=5)
-        ttk.Entry(main_frame, textvariable=self.src_dir, width=50).grid(row=0, column=1, padx=5, pady=5, sticky=tk.EW)
-        ttk.Button(main_frame, text="Procurar...", command=self.browse_src).grid(row=0, column=2, padx=5, pady=5)
+        ttk.Label(main_frame, text="Pasta de Origem:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        ttk.Entry(main_frame, textvariable=self.src_dir, width=50).grid(row=1, column=1, padx=5, pady=5, sticky=tk.EW)
+        ttk.Button(main_frame, text="Procurar...", command=self.browse_src).grid(row=1, column=2, padx=5, pady=5)
         
         # Destination directory
-        ttk.Label(main_frame, text="Pasta de Destino:").grid(row=1, column=0, sticky=tk.W, pady=5)
-        ttk.Entry(main_frame, textvariable=self.dest_dir, width=50).grid(row=1, column=1, padx=5, pady=5, sticky=tk.EW)
-        ttk.Button(main_frame, text="Procurar...", command=self.browse_dest).grid(row=1, column=2, padx=5, pady=5)
+        ttk.Label(main_frame, text="Pasta de Destino:").grid(row=2, column=0, sticky=tk.W, pady=5)
+        ttk.Entry(main_frame, textvariable=self.dest_dir, width=50).grid(row=2, column=1, padx=5, pady=5, sticky=tk.EW)
+        ttk.Button(main_frame, text="Procurar...", command=self.browse_dest).grid(row=2, column=2, padx=5, pady=5)
         
         # Options
         ttk.Checkbutton(
@@ -617,18 +679,19 @@ class VideoOrganizerApp:
         if folder:
             self.dest_dir.set(folder)
     
-    def log(self, message):
+    def log(self, message, log_to_file=True):
         timestamp = datetime.now().strftime("%H:%M:%S")
-        formatted_message = f"[{timestamp}] {message}\n"
+        formatted_message = f"[{timestamp}] {message}"
         
         # Escrever na tela
         self.log_text.configure(state="normal")
-        self.log_text.insert(tk.END, formatted_message)
+        self.log_text.insert(tk.END, formatted_message + "\n")
         self.log_text.see(tk.END)
         self.log_text.configure(state="disabled")
         
-        # Escrever no arquivo de log via stdout
-        print(message)
+        # Escrever no arquivo de log apenas se solicitado
+        if log_to_file:
+            print(formatted_message)
         
         # Forçar atualização da interface
         self.root.update_idletasks()
@@ -781,8 +844,18 @@ class TextRedirector:
         self.widget = widget
         self.tag = tag
         self.log_file = None
+        self.skip_next = False  # Flag para controlar logs duplicados
         
     def write(self, str_):
+        # Pular logs que já foram tratados pelo método log()
+        if self.skip_next:
+            self.skip_next = False
+            return
+            
+        # Se a mensagem começa com timestamp, é do método log()
+        if re.match(r'^\[\d{2}:\d{2}:\d{2}\]', str_):
+            self.skip_next = True  # Marcar para pular a próxima mensagem
+            
         # Escrever no widget da interface
         self.widget.configure(state="normal")
         self.widget.insert("end", str_, (self.tag,))
@@ -795,7 +868,9 @@ class TextRedirector:
                 with open(self.log_file, 'a', encoding='utf-8') as f:
                     f.write(str_)
             except Exception as e:
-                print(f"Erro ao escrever no arquivo de log: {e}", file=sys.stderr)
+                # Usar stderr diretamente para evitar loop infinito
+                import sys
+                sys.stderr.write(f"Erro ao escrever no arquivo de log: {e}\n")
     
     def set_log_file(self, log_file):
         """Define o arquivo de log para salvar as saídas."""
@@ -806,7 +881,7 @@ class TextRedirector:
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Organiza vídeos por cor predominante.')
-    # ... (rest of the code remains the same)
+    parser.add_argument('--src', type=str, help='Pasta de origem dos vídeos')
     parser.add_argument('--dst', type=str, help='Pasta de destino para os vídeos organizados')
     parser.add_argument('--overwrite', action='store_true', help='Sobrescrever arquivos existentes')
     parser.add_argument('--delete-source', action='store_true', help='Excluir arquivos da pasta de origem após cópia')
@@ -814,22 +889,26 @@ def parse_arguments():
 
 def main():
     try:
-        # Configurar logging para ambos os modos (GUI e linha de comando)
-        log_file = setup_logging()
-        
         args = parse_arguments()
         
-        # Verificar se os argumentos foram fornecidos
+        # Configurar logging será feito na inicialização da UI para o modo GUI
+        # ou aqui para o modo linha de comando
         if hasattr(args, 'src') and hasattr(args, 'dst') and args.src and args.dst:
-            # Command line mode
-            src_dir = Path(args.src)
-            dest_dir = Path(args.dst)
+            log_file = setup_logging()
+            if log_file:
+                print(f"Logs serão salvos em: {log_file}")
             
-            if not src_dir.exists() or not src_dir.is_dir():
-                print(f"Erro: A pasta de origem não existe: {src_dir}")
-                return
+            # Verificar se os argumentos foram fornecidos
+            if hasattr(args, 'src') and hasattr(args, 'dst') and args.src and args.dst:
+                # Command line mode
+                src_dir = Path(args.src)
+                dest_dir = Path(args.dst)
                 
-            dest_dir.mkdir(parents=True, exist_ok=True)
+                if not src_dir.exists() or not src_dir.is_dir():
+                    print(f"Erro: A pasta de origem não existe: {src_dir}")
+                    return
+                    
+                dest_dir.mkdir(parents=True, exist_ok=True)
             
             # Find all video files
             video_files = []
@@ -901,22 +980,25 @@ def main():
             print("\nProcessamento concluído!")
         else:
             # GUI mode - sempre iniciar GUI se não houver argumentos
-            root = tk.Tk()
             try:
+                root = tk.Tk()
                 app = VideoOrganizerApp(root)
                 root.mainloop()
             except Exception as e:
-                messagebox.showerror("Erro", f"Erro fatal na aplicação: {str(e)}")
-                root.destroy()
+                import traceback
+                traceback.print_exc()
+                try:
+                    messagebox.showerror("Erro", f"Erro fatal na aplicação: {str(e)}")
+                except:
+                    pass
+                if 'root' in locals():
+                    try:
+                        root.destroy()
+                    except:
+                        pass
     except Exception as e:
-        print(f"Erro ao iniciar aplicação: {str(e)}")
-        # Fallback para GUI se houver erro
-        try:
-            root = tk.Tk()
-            app = VideoOrganizerApp(root)
-            root.mainloop()
-        except Exception as gui_error:
-            print(f"Erro também no modo GUI: {str(gui_error)}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main()
