@@ -20,12 +20,13 @@ O Organizador de Fundos é uma ferramenta automática que analisa vídeos e os o
 
 ### Funcionalidades principais:
 - ✅ Análise automática de cores em vídeos
-- ✅ Organização em pastas por cor predominante
-- ✅ Suporte a combinações de duas cores
-- ✅ Interface gráfica intuitiva
+- ✅ Organização em pastas por cor predominante (100% em português)
+- ✅ Detecção de preto-branco e vídeos coloridos
+- ✅ Interface gráfica intuitiva com descrições detalhadas
 - ✅ Modo linha de comando para automação
 - ✅ Opção de excluir arquivos da origem após cópia
 - ✅ Suporte aos formatos: MP4, MOV, AVI, M4V
+- ✅ Ajuste automático de pasta de origem após processamento
 
 ---
 
@@ -36,9 +37,9 @@ O programa amostra frames do vídeo em intervalos regulares e analisa cada pixel
 
 ### 2. Detecção de cores
 Utiliza o espaço de cor HSV (Hue, Saturation, Value) para detectar:
-- **Cores primárias**: Vermelho, Laranja, Amarelo, Verde, Ciano, Azul, Violeta, Rosa
-- **Cores neutras**: Branco, Preto
-- **Combinações**: Quando duas cores são predominantes
+- **Cores primárias**: Vermelho, Laranja, Amarelo, Verde, Azul, Violeta
+- **Cores neutras**: Preto-branco (detectado por valor e saturação)
+- **Múltiplas cores**: Quando várias cores são predominantes
 
 ### 3. Classificação
 Baseado no percentual de cada cor detectada, o vídeo é classificado e movido para a pasta correspondente.
@@ -48,37 +49,29 @@ Baseado no percentual de cada cor detectada, o vídeo é classificado e movido p
 ## 📊 Regras de classificação
 
 ### Limiar mínimo de cor
-- **Percentual mínimo**: **8%**
-- Uma cor precisa aparecer em pelo menos 8% dos pixels do vídeo para ser considerada relevante
+- **Percentual mínimo**: **20%** (padrão)
+- Uma cor precisa aparecer em pelo menos 20% dos pixels do vídeo para ser considerada relevante
 - Este limiar evita que pequenos elementos ou ruídos afetem a classificação
+- **Ajustável**: Pode ser modificado na interface ou no código
 
 ### Lógica de classificação
 
-#### 1. Cor única
-Se apenas uma cor atinge o limiar mínimo:
+#### 1. Cor única predominante
+Se apenas uma cor atinge o limiar mínimo (>50%):
 ```
 Vídeo com 45% de azul → pasta /azul/
 ```
 
-#### 2. Combinação de duas cores
-Se exatamente duas cores atingem o limiar:
-```
-Vídeo com 25% rosa + 20% laranja → pasta /laranja-rosa/
-```
-**Importante**: As combinações seguem ordem alfabética para evitar duplicação:
-- `laranja-rosa` ✅
-- `rosa-laranja` ❌ (nunca será criado)
-
-#### 3. Três ou mais cores
-Se três ou mais cores atingem o limiar:
+#### 2. Múltiplas cores sem predominância clara
+Se múltiplas cores mas nenhuma >50%:
 ```
 Vídeo com múltiplas cores → pasta /colorido/
 ```
 
-#### 4. Sem cores detectadas
+#### 3. Sem cores detectadas
 Se nenhuma cor atinge o limiar mínimo:
 ```
-Vídeo sem cores predominantes → pasta /nao_identificado/
+Vídeo sem cores predominantes → pasta /nao-identificado/
 ```
 
 ---
@@ -142,8 +135,16 @@ Você pode ajustar estes parâmetros editando o arquivo `organize_backgrounds.py
 DEFAULT_CONFIG = {
     'sample_frames': 10,           # Número de frames analisados por vídeo
     'resize_width': 320,           # Redimensionamento para processamento mais rápido
-    'min_color_percent': 8,        # PERCENTUAL MÍNIMO para considerar uma cor (8%)
+    'min_color_percent': 20,       # PERCENTUAL MÍNIMO para considerar uma cor (20%)
     'supported_formats': ('.mp4', '.mov', '.avi', '.m4v'),
+    'color_ranges': {
+        'vermelho': [(0, 10), (170, 179)],
+        'laranja': [(11, 25)],
+        'amarelo': [(26, 35)],
+        'verde': [(36, 85)],
+        'azul': [(101, 140)],
+        'violeta': [(141, 160)],
+    },
     'saturation_threshold': 30,    # Saturação mínima para considerar colorido
     'value_threshold_white': 200,  # Valor mínimo para considerar branco
     'value_threshold_black': 30,   # Valor máximo para considerar preto
@@ -153,12 +154,14 @@ DEFAULT_CONFIG = {
 ### Ajustes recomendados:
 
 - **`min_color_percent`**: 
-  - Aumente para ser mais restritivo (ex: 10-12%)
-  - Diminua para ser mais inclusivo (ex: 5-6%)
+  - Aumente para ser mais restritivo (ex: 25-30%)
+  - Diminua para ser mais inclusivo (ex: 15-18%)
+  - Padrão: 20%
 
 - **`sample_frames`**:
   - Aumente para análise mais precisa (ex: 15-20)
   - Diminua para processamento mais rápido (ex: 5-8)
+  - Padrão: 10
 
 ---
 
@@ -201,54 +204,24 @@ Se ocorrer erro ao excluir um arquivo, o programa:
 
 ---
 
-## � Estrutura de pastas criadas
+## 📂 Estrutura de pastas criadas
 
-O programa automaticamente cria esta estrutura na pasta de destino:
+O programa automaticamente cria esta estrutura na pasta de destino (100% em português):
 
 ```
 PastaDestino/
-├── amarelo/
-├── azul/
-├── branco/
-├── ciano/
-├── laranja/
-├── preto/
-├── rosa/
-├── verde/
-├── vermelho/
-├── violeta/
-├── colorido/          # Vídeos com 3+ cores
-├── nao_identificado/  # Vídeos sem cores predominantes
-└── combinações/       # Pastas de duas cores
-    ├── amarelo-azul/
-    ├── amarelo-ciano/
-    ├── amarelo-laranja/
-    ├── amarelo-rosa/
-    ├── amarelo-verde/
-    ├── amarelo-vermelho/
-    ├── amarelo-violeta/
-    ├── azul-ciano/
-    ├── azul-laranja/
-    ├── azul-rosa/
-    ├── azul-verde/
-    ├── azul-vermelho/
-    ├── azul-violeta/
-    ├── ciano-laranja/
-    ├── ciano-rosa/
-    ├── ciano-verde/
-    ├── ciano-vermelho/
-    ├── ciano-violeta/
-    ├── laranja-rosa/
-    ├── laranja-verde/
-    ├── laranja-vermelho/
-    ├── laranja-violeta/
-    ├── rosa-verde/
-    ├── rosa-vermelho/
-    ├── rosa-violeta/
-    ├── verde-vermelho/
-    ├── verde-violeta/
-    └── vermelho-violeta/
+├── amarelo/           # Vídeos predominantemente amarelos
+├── azul/              # Vídeos predominantemente azuis
+├── laranja/           # Vídeos predominantemente laranjas
+├── verde/             # Vídeos predominantemente verdes
+├── vermelho/          # Vídeos predominantemente vermelhos
+├── violeta/           # Vídeos predominantemente violetas
+├── preto-branco/      # Vídeos em preto, branco ou tons de cinza
+├── colorido/          # Vídeos com múltiplas cores predominantes
+└── nao-identificado/  # Vídeos sem cores predominantes claras
 ```
+
+**Atualização**: O sistema foi atualizado para usar apenas nomes em português, eliminando pastas em inglês.
 
 ---
 
@@ -277,15 +250,15 @@ PastaDestino/
 - **Causa**: Sem permissão para escrever na pasta de destino
 - **Solução**: Escolha outra pasta ou execute como administrador
 
-### Vídeos indo para "nao_identificado"
-- **Causa**: Nenhuma cor atingiu o limiar mínimo de 8%
+### Vídeos indo para "nao-identificado"
+- **Causa**: Nenhuma cor atingiu o limiar mínimo de 20%
 - **Solução**: 
-  - Reduza `min_color_percent` para 5-6%
+  - Reduza `min_color_percent` para 15-18%
   - Verifique se o vídeo realmente tem cores predominantes
 
 ### Muitos vídeos em "colorido"
-- **Causa**: Vídeos com muitas cores variadas
-- **Solução**: Aumente `min_color_percent` para 10-12%
+- **Causa**: Vídeos com muitas cores variadas ou limiar muito baixo
+- **Solução**: Aumente `min_color_percent` para 25-30%
 
 ### Performance lenta
 - **Causa**: Vídeos grandes ou muitos arquivos
@@ -297,10 +270,13 @@ PastaDestino/
 
 ## 📝 Logs
 
-O programa cria um arquivo de log em seu diretório pessoal:
-- **Local**: `C:\Users\[SEU_USUARIO]\organize_backgrounds.log`
+O programa cria arquivos de log automaticamente:
+- **Local**: `./logs/logs_YYYY-MM-DD_HH-MM-SS.txt`
+- **Relativo ao executável**: Mesma pasta onde está o `OrganizadorFundos.exe`
 - **Conteúdo**: Registro detalhado de todos os processamentos
 - **Uso**: Útil para identificar problemas ou verificar o que aconteceu
+
+A primeira linha do log sempre mostra: `Arquivo de log criado: [caminho completo]`
 
 ---
 
@@ -313,6 +289,8 @@ O programa cria um arquivo de log em seu diretório pessoal:
 5. **Processamento em lote**: Ideal para organizar grandes coleções de uma vez
 6. **Exclusão automática**: Use `--delete-source` com cuidado - faça backup antes!
 7. **Verificação de logs**: Monitore o log para confirmar que as exclusões ocorreram corretamente
+8. **Ajuste automático**: Após processar, o campo de origem ajusta automaticamente para a pasta pai
+9. **Configuração de cores**: Use a aba "Parâmetros" para ajustar sensibilidade e outras configurações
 
 ---
 
@@ -320,10 +298,11 @@ O programa cria um arquivo de log em seu diretório pessoal:
 
 Se encontrar problemas:
 
-1. Verifique o arquivo de log em `C:\Users\[SEU_USUARIO]\organize_backgrounds.log`
-2. Certifique-se de que os vídeos estão nos formatos suportados
+1. Verifique o arquivo de log na pasta `logs` ao lado do executável
+2. Certifique-se de que os vídeos estão nos formatos suportados (.mp4, .mov, .avi, .m4v)
 3. Teste com uma pequena quantidade de vídeos primeiro
 4. Verifique as permissões das pastas
+5. Confirme se o percentual mínimo de cor (`min_color_percent`) está adequado
 
 ---
 
@@ -333,7 +312,8 @@ Este software é fornecido para uso pessoal e profissional. Sinta-se livre para 
 
 ---
 
-**Versão**: 1.0  
-**Última atualização**: 2024  
+**Versão**: 1.0.0  
+**Última atualização**: Novembro 2024  
 **Formatos suportados**: MP4, MOV, AVI, M4V  
-**Requisitos mínimos**: Windows 10, 4GB RAM, 1GB espaço em disco
+**Requisitos mínimos**: Windows 10, 4GB RAM, 1GB espaço em disco  
+**Idioma das pastas**: 100% português

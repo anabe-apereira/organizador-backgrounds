@@ -2,7 +2,7 @@
 
 [![Versão](https://img.shields.io/badge/versão-1.0.0-blue)](https://github.com/anabe-apereira/organizador-backgrounds/releases)
 [![Licença: MIT](https://img.shields.io/badge/Licença-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/anabe-apereira/organizador-backgrounds)
 
 **Organizador de Fundos ProPresenter** é uma ferramenta profissional para **organização automática** de vídeos usados como fundos no ProPresenter, classificando-os por cores predominantes. Desenvolvido para produtoras de vídeo, igrejas e profissionais de mídia, este aplicativo agiliza significativamente o fluxo de trabalho de gerenciamento de mídia.
@@ -50,9 +50,12 @@ Este software foi projetado para:
 ## 🛠️ Instalação
 
 ### Pré-requisitos
-- Python 3.8 ou superior
+- Python 3.9 ou superior
 - OpenCV (instalado automaticamente)
 - NumPy (instalado automaticamente)
+- scikit-learn (instalado automaticamente)
+- tqdm (instalado automaticamente)
+- Pillow (instalado automaticamente)
 - Tkinter (geralmente incluído com Python)
 
 ### Instalação do Executável (Recomendado para Usuários Finais)
@@ -86,6 +89,8 @@ python organize_backgrounds.py
 
 - 🐍 Python **3.9+**
 - 📄 Bibliotecas listadas no `requirements.txt`
+- 💾 **4GB RAM** recomendado
+- 💿 **1GB espaço em disco** para o executável
 
 ---
 
@@ -127,81 +132,34 @@ python organize_backgrounds.py --src "caminho/para/origem" --dst "caminho/para/d
 
 Os vídeos serão organizados em:
 
-- 🎨 Cores únicas:  
-  `branco/`, `vermelho/`, `laranja/`, `amarelo/`, `verde/`, `ciano/`, `azul/`, `violeta/`, `preto/`, `rosa/`
-- 🌓 Combinações:  
-  `cor1-cor2/` (ex: `azul-amarelo/`)
-- 🌈 `colorido/`: mais de 3 cores predominantes  
-- ❓ `nao_identificado/`: vídeos sem classificação possível
+- 🎨 **Cores únicas** (100% em português):
+  `amarelo/`, `azul/`, `laranja/`, `verde/`, `vermelho/`, `violeta/`, `preto-branco/`
+- 🌈 **colorido/**: vídeos com múltiplas cores predominantes
+- ❓ **nao-identificado/**: vídeos sem classificação possível
+
+**Nota**: O sistema foi atualizado para usar apenas nomes em português, eliminando pastas em inglês como `red/`, `green/`, `cyan/`, etc.
 
 ---
 
 ## 🧪 Criando um Executável (Windows)
 
-Instale o PyInstaller:
+**Método recomendado**: Use o script `build.py` incluído no projeto
 
 ```bash
+# Instale o PyInstaller
 pip install pyinstaller
+
+# Execute o script de build
+python build.py
 ```
 
-Gere o executável:
+O script `build.py` automaticamente:
+- ✅ Limpa builds anteriores
+- ✅ Inclui todas as dependências necessárias
+- ✅ Adiciona o ícone do aplicativo
+- ✅ Configura imports ocultos do sklearn
 
-```bash
-pyinstaller --onefile --windowed --icon=NONE --add-data "requirements.txt;." organize_backgrounds.py
-```
-
-### 📁 Versão robusta com `.spec`
-
-Crie um arquivo `organizer.spec`:
-
-```python
-# organizer.spec
-import os
-from PyInstaller.utils.hooks import collect_data_files
-
-block_cipher = None
-
-a = Analysis(['organize_backgrounds.py'],
-             pathex=[],
-             binaries=[],
-             datas=[],
-             hiddenimports=['tkinter', 'cv2', 'numpy', 'sklearn', 'tqdm'],
-             hookspath=[],
-             runtime_hooks=[],
-             excludes=[],
-             win_no_prefer_redirects=False,
-             win_private_assemblies=False,
-             cipher=block_cipher,
-             noarchive=False)
-
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-exe = EXE(pyz,
-          a.scripts,
-          a.binaries,
-          a.zipfiles,
-          a.datas,
-          [],
-          name='OrganizadorFundos',
-          debug=False,
-          bootloader_ignore_signals=False,
-          strip=False,
-          upx=True,
-          upx_exclude=[],
-          runtime_tmpdir=None,
-          console=False,
-          windowed=True,
-          icon='NONE')
-```
-
-Depois execute:
-
-```bash
-pyinstaller organizer.spec
-```
-
-📂 O arquivo final estará em:  
-`dist/OrganizadorFundos.exe`
+**Resultado**: `dist/OrganizadorFundos.exe`
 
 ---
 
@@ -213,8 +171,19 @@ Edite parâmetros no início do arquivo `organize_backgrounds.py`:
 DEFAULT_CONFIG = {
     'sample_frames': 10,      # Número de quadros a serem amostrados
     'resize_width': 320,      # Largura para redimensionar os quadros
-    'min_color_percent': 8,   # Percentual mínimo para considerar uma cor
-    # ... outros parâmetros
+    'min_color_percent': 20,  # Percentual mínimo para considerar uma cor
+    'supported_formats': ('.mp4', '.mov', '.avi', '.m4v'),
+    'color_ranges': {
+        'vermelho': [(0, 10), (170, 179)],
+        'laranja': [(11, 25)],
+        'amarelo': [(26, 35)],
+        'verde': [(36, 85)],
+        'azul': [(101, 140)],
+        'violeta': [(141, 160)],
+    },
+    'saturation_threshold': 30,
+    'value_threshold_black': 30,
+    'value_threshold_white': 200,
 }
 ```
 
@@ -222,7 +191,12 @@ DEFAULT_CONFIG = {
 
 ## 📜 Logs
 
-Um arquivo `organize.log` é gerado automaticamente com informações detalhadas do processamento.
+Um arquivo de log é gerado automaticamente em:
+- **Local**: `./logs/logs_YYYY-MM-DD_HH-MM-SS.txt`
+- **Relativo**: Pasta `logs` no mesmo diretório do executável
+- **Conteúdo**: Registro detalhado do processamento e erros
+
+A primeira linha do log sempre mostra o caminho completo do arquivo gerado.
 
 ---
 

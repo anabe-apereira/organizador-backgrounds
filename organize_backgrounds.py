@@ -68,19 +68,17 @@ DEFAULT_CONFIG = {
     'min_color_percent': 20,  # Minimum percentage for a color to be considered
     'supported_formats': ('.mp4', '.mov', '.avi', '.m4v'),
     'color_ranges': {
-        'red': [(0, 10), (170, 179)],
-        'orange': [(11, 25)],
-        'yellow': [(26, 35)],
-        'green': [(36, 85)],
-        'cyan': [(86, 100)],
-        'blue': [(101, 140)],
-        'violet': [(141, 160)],
-        'pink': [(161, 170)],
+        'vermelho': [(0, 10), (170, 179)],
+        'laranja': [(11, 25)],
+        'amarelo': [(26, 35)],
+        'verde': [(36, 85)],
+        'azul': [(101, 140)],
+        'violeta': [(141, 160)],
     },
     'saturation_threshold': 30,  # Minimum saturation to be considered colored
-    'value_threshold_white': 200,  # Minimum value to be considered white
-    'saturation_threshold_white': 30,  # Maximum saturation to be considered white
-    'value_threshold_black': 30,  # Maximum value to be considered black
+    'value_threshold_black': 30,  # Maximum value for black detection
+    'value_threshold_white': 200,  # Minimum value for white detection
+    'saturation_threshold_white': 30,  # Maximum saturation for white detection
 }
 
 # Configure logging
@@ -319,7 +317,7 @@ def get_color_combinations():
 def get_destination_folder(colors: List[Tuple[str, float]], dest_dir: Path) -> Path:
     """Determine the destination folder based on dominant colors."""
     if not colors:
-        return dest_dir / 'nao_identificado'
+        return dest_dir / 'nao-identificado'
     
     # Se não houver cores predominantes claras (múltiplas cores sem predominância)
     if len(colors) > 1:
@@ -748,7 +746,7 @@ class VideoOrganizerApp:
         required_dirs = [
             'vermelho', 'laranja', 'amarelo', 'verde',
             'azul', 'violeta', 'preto-branco',
-            'colorido', 'nao_identificado'
+            'colorido', 'nao-identificado'
         ]
     
         # Criar todas as pastas necessárias
@@ -800,9 +798,9 @@ class VideoOrganizerApp:
                 
             except Exception as e:
                 self.log(f"Erro ao processar {video_path.name}: {str(e)}")
-                # Try to copy to nao_identificado on error
+                # Try to copy to nao-identificado on error
                 try:
-                    error_dest = dest_dir / 'nao_identificado'
+                    error_dest = dest_dir / 'nao-identificado'
                     error_dest.mkdir(exist_ok=True)
                     copy_video(video_path, error_dest, overwrite)
                     self.log(f"  → Copiado para: {error_dest.relative_to(dest_dir)}")
@@ -812,11 +810,33 @@ class VideoOrganizerApp:
         # Update UI when done
         self.root.after(0, self.processing_complete)
     
+    def adjust_source_directory(self):
+        """Ajusta o campo de pasta origem para remover a última subpasta."""
+        current_path = self.src_dir.get()
+        if not current_path:
+            return
+            
+        try:
+            # Converter para Path e remover a última pasta
+            path_obj = Path(current_path)
+            if path_obj.parent != path_obj:  # Se não for a raiz
+                adjusted_path = path_obj.parent
+                # Manter a barra no final se o caminho original tinha
+                adjusted_str = str(adjusted_path) + ('\\' if str(adjusted_path).endswith(':') or not str(adjusted_path).endswith('\\') else '')
+                self.src_dir.set(adjusted_str)
+                self.log(f"📁 Pasta de origem ajustada para: {adjusted_str}")
+        except Exception as e:
+            self.log(f"⚠️ Erro ao ajustar pasta de origem: {str(e)}")
+    
     def processing_complete(self):
         """Finaliza o processamento e inicia o temporizador para fechar a janela."""
         self.processing = False
         self.start_button.config(state=tk.NORMAL)
         self.root.title("Organizador de Fundos ProPresenter - Concluído")
+        
+        # Ajustar pasta de origem para remover a última subpasta
+        self.adjust_source_directory()
+        
         messagebox.showinfo("Concluído", "Processamento finalizado com sucesso!")
         
         # Código de fechamento automático comentado para possível reativação futura
@@ -932,7 +952,7 @@ def main():
             required_dirs = [
                 'vermelho', 'laranja', 'amarelo', 'verde',
                 'azul', 'violeta', 'preto-branco',
-                'colorido', 'nao_identificado'
+                'colorido', 'nao-identificado'
             ]
             
             for dir_name in required_dirs:
@@ -974,9 +994,9 @@ def main():
                     
                 except Exception as e:
                     print(f"Erro ao processar {video_path.name}: {str(e)}")
-                    # Try to copy to nao_identificado on error
+                    # Try to copy to nao-identificado on error
                     try:
-                        error_dest = dest_dir / 'nao_identificado'
+                        error_dest = dest_dir / 'nao-identificado'
                         error_dest.mkdir(exist_ok=True)
                         copy_video(video_path, error_dest, args.overwrite)
                         print(f"  → Copiado para: {error_dest.relative_to(dest_dir)}")
