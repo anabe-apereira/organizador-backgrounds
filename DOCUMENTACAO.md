@@ -182,7 +182,7 @@ O programa oferece a opção de **excluir automaticamente** os arquivos da pasta
 ### Como ativar:
 
 #### Interface gráfica:
-1. Marque a opção: "Excluir arquivos da pasta de origem após cópia" (texto em vermelho)
+1. Marque a opção: "Excluir arquivos da pasta de origem após cópia"
 2. Prossiga normalmente com a organização
 
 #### Linha de comando:
@@ -313,7 +313,7 @@ Este software é fornecido para uso pessoal e profissional. Sinta-se livre para 
 ---
 
 **Versão**: 1.0.0  
-**Última atualização**: Novembro 2024  
+**Última atualização**: Novembro 2025
 **Formatos suportados**: MP4, MOV, AVI, M4V  
 **Requisitos mínimos**: Windows 10, 4GB RAM, 1GB espaço em disco  
 **Idioma das pastas**: 100% português

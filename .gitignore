@@ -17,6 +17,7 @@ __pycache__/
 # Logs
 *.log
 *.txt
+*.zip
 
 # Arquivos executáveis
 *.exe
